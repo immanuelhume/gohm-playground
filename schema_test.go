@@ -1,7 +1,6 @@
 package gohm_test
 
 import (
-	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -19,11 +18,11 @@ func TestParseModel(t *testing.T) {
 		Struct *ast.StructType
 	}{
 		{"Struct with gohm tag",
-			gohmStruct,
-			gohmStructTypeSpec,
-			gohmStructTypeInfo},
+			dogeDecl,
+			dogeTypeSpec,
+			dogeStructType},
 		{"Struct without gohm tag",
-			noGohmStruct,
+			cheemsDecl,
 			nil, nil},
 		{"Interface with gohm tag",
 			interfaceStub,
@@ -33,8 +32,8 @@ func TestParseModel(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.Name, func(t *testing.T) {
 			spec, struc := gohm.ParseModel(test.Node)
-			assertDeepEqual(t, spec, test.Spec)
-			assertDeepEqual(t, struc, test.Struct)
+			AssertDeepEqual(t, spec, test.Spec)
+			AssertDeepEqual(t, struc, test.Struct)
 		})
 	}
 }
@@ -53,114 +52,130 @@ func TestHasGohmTag(t *testing.T) {
 
 	for _, test := range cases {
 		got := gohm.HasGohmTag(test.Doc)
-		assertBool(t, got, test.HasGohm)
+		AssertBool(t, got, test.HasGohm)
 	}
 }
 
-func TestParseStruct(t *testing.T) {
+func TestParseTypeSpec(t *testing.T) {
 	cases := []struct {
-		Name   string
-		Node   *ast.GenDecl
-		Spec   *ast.TypeSpec
-		Struct *ast.StructType
+		Name string
+		Node *ast.GenDecl
+		Want *ast.TypeSpec
 	}{
-		{"var declaration",
-			&ast.GenDecl{Tok: token.VAR},
-			nil, nil},
-		{"interface type declaration",
+		{"an interface declaration",
 			interfaceStub,
-			nil, nil,
-		},
-		{"struct type declaration",
-			gohmStruct,
-			gohmStructTypeSpec,
-			gohmStructTypeInfo,
-		},
+			interfaceStubTypeSpec},
+		{"a struct declaration",
+			dogeDecl,
+			dogeTypeSpec},
 	}
 
 	for _, test := range cases {
-		t.Run(test.Name, func(t *testing.T) {
-			spec, struc := gohm.ParseStruct(test.Node)
-			assertDeepEqual(t, spec, test.Spec)
-			assertDeepEqual(t, struc, test.Struct)
-		})
+		got := gohm.GetTypeSpec(test.Node)
+		AssertDeepEqual(t, got, test.Want)
 	}
 }
 
-func TestWriteCreate(t *testing.T) {
-	b := bytes.Buffer{}
-	gohm.WriteCreate(&b, gohmStructTypeSpec, gohmStructTypeInfo)
-	want := `func (u *User) Create(name string, age int) {`
-	got := b.String()
-
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+func TestParseStructType(t *testing.T) {
+	cases := []struct {
+		Name     string
+		TypeSpec *ast.TypeSpec
+		Want     *ast.StructType
+	}{
+		{"interface type",
+			interfaceStubTypeSpec,
+			nil},
+		{"struct type",
+			dogeTypeSpec,
+			dogeStructType},
 	}
+
+	for _, test := range cases {
+		got := gohm.GetStructType(test.TypeSpec)
+		AssertDeepEqual(t, got, test.Want)
+	}
+
 }
 
 func TestParseFields(t *testing.T) {
-	t.Run("places fields in a map", func(t *testing.T) {
-		got := gohm.ParseFields(gohmStructTypeInfo.Fields.List)
-		want := map[string]string{
-			"Name": "string",
-			"Age":  "int",
+	t.Run("collects fields in a slice", func(t *testing.T) {
+		got := gohm.ParseFields(dogeStructType)
+		want := []gohm.Field{
+			{Name: "Name", Type: "string"},
+			{Name: "Age", Type: "int"},
 		}
-		assertDeepEqual(t, got, want)
+		AssertDeepEqual(t, got, want)
 	})
 
 	t.Run("empty struct", func(t *testing.T) {
-		got := gohm.ParseFields([]*ast.Field{})
-		want := map[string]string{}
-		assertDeepEqual(t, got, want)
+		got := gohm.ParseFields(emptyStructTypeInfo)
+		want := []gohm.Field{}
+		AssertDeepEqual(t, got, want)
 	})
 }
 
 // assertion helpers
-func assertBool(t testing.TB, got, want bool) {
+func AssertBool(t testing.TB, got, want bool) {
 	t.Helper()
 	if got != want {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
-func assertDeepEqual(t testing.TB, got, want interface{}) {
+func AssertDeepEqual(t testing.TB, got, want interface{}) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+func AssertString(t testing.TB, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
 
-// test doubles
+// manually create test doubles
 var expr, _ = parser.ParseFile(token.NewFileSet(), "", `
 package main
 
 // gohm
 // big chungus
-type User struct {
+type Doge struct {
 	Name string
 	Age  int
 }
 
 // big chungus
-type Song struct {
+type Cheems struct {
 	Name string
-	Length  int
+	Age  int
 }
 
 // gohm
 type Chungus interface {
 	Fight()
 }
+
+// empty struct
+type Murphy struct {}
 `, parser.ParseComments)
 
-var gohmStruct = expr.Decls[0].(*ast.GenDecl)
-var gohmStructTypeSpec = gohmStruct.Specs[0].(*ast.TypeSpec)
-var gohmStructTypeInfo = gohmStructTypeSpec.Type.(*ast.StructType)
+var dogeDecl = expr.Decls[0].(*ast.GenDecl)
+var dogeTypeSpec = dogeDecl.Specs[0].(*ast.TypeSpec)
+var dogeStructType = dogeTypeSpec.Type.(*ast.StructType)
 
-var noGohmStruct = expr.Decls[1].(*ast.GenDecl)
-var noGohmStructTypeSpec = noGohmStruct.Specs[0].(*ast.TypeSpec)
-var noGohmStructTypeInfo = noGohmStructTypeSpec.Type.(*ast.StructType)
+var cheemsDecl = expr.Decls[1].(*ast.GenDecl)
 
-var gohmDoc = gohmStruct.Doc
-var noGohmDoc = noGohmStruct.Doc
+// var cheemsTypeSpec = cheemsDecl.Specs[0].(*ast.TypeSpec)
+
+// var cheemsTypeInfo = cheemsTypeSpec.Type.(*ast.StructType)
+
+var gohmDoc = dogeDecl.Doc
+var noGohmDoc = cheemsDecl.Doc
 
 var interfaceStub = expr.Decls[2].(*ast.GenDecl)
+var interfaceStubTypeSpec = interfaceStub.Specs[0].(*ast.TypeSpec)
+
+var emptyStruct = expr.Decls[3].(*ast.GenDecl)
+var emptyStructTypeSpec = emptyStruct.Specs[0].(*ast.TypeSpec)
+var emptyStructTypeInfo = emptyStructTypeSpec.Type.(*ast.StructType)
