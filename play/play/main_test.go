@@ -1,11 +1,11 @@
-package playground
+package play
 
 import (
 	"context"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/immanuelhume/gohm"
-	"github.com/immanuelhume/gohm/playground/stubs"
+	"github.com/immanuelhume/gohm/play/stubs"
 )
 
 type User struct {
